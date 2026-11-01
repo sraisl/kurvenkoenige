@@ -1,0 +1,1290 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kurvenkönige</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;1,700&display=swap">
+<style>
+/* Layout: das Spiel fuellt den ganzen Schirm, UI liegt als Boxenstopp-Tafel mit Curbstreifen darueber. */
+:root {
+  color-scheme: dark;
+  --asphalt: #1d2029;
+  --asphalt-2: #2b2f3b;
+  --line: #474d5e;
+  --paper: #f7f2e6;
+  --muted: #b3b6c2;
+  --curb: #e5342b;
+  --sun: #ffc72c;
+  --ice: #6fd6ff;
+  --font-display: "Bungee", "Arial Black", Impact, sans-serif;
+  --font-body: "Barlow Condensed", "Avenir Next Condensed", "Arial Narrow", sans-serif;
+  --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+}
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--asphalt); color: var(--paper);
+  font-family: var(--font-body); font-size: 18px; font-weight: 500;
+  overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none;
+}
+#stage { position: relative; width: 100%; height: 100%; overflow: hidden; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+/* HUD */
+#hud { position: absolute; inset: 0; pointer-events: none; font-variant-numeric: tabular-nums; }
+.hud-left { position: absolute; top: 14px; left: var(--gutter-l); display: grid; gap: 2px; text-shadow: 0 2px 0 #000a; }
+#pos { font-family: var(--font-display); font-size: clamp(44px, 9vh, 76px); line-height: 1; color: var(--sun); -webkit-text-stroke: 1px #0007; }
+#pos small { font-family: var(--font-body); font-size: 20px; font-weight: 700; color: var(--paper); -webkit-text-stroke: 0; margin-left: 4px; }
+#lap { font-weight: 700; font-size: 22px; letter-spacing: .04em; }
+.hud-right { position: absolute; top: 14px; right: var(--gutter-r); text-align: right; text-shadow: 0 2px 0 #000a; }
+#time { font-weight: 700; font-size: 26px; }
+#last { color: var(--muted); font-size: 18px; min-height: 22px; }
+#item {
+  position: absolute; top: 12px; left: 50%; width: 72px; height: 72px; margin-left: -36px;
+  background: #0009; border: 3px solid var(--paper); border-radius: 10px; display: grid; place-items: center;
+}
+#item svg { width: 52px; height: 52px; display: block; }
+#item.empty { opacity: .55; }
+#map { position: absolute; left: var(--gutter-l); bottom: 14px; width: clamp(96px, 19vh, 150px); height: clamp(96px, 19vh, 150px); }
+#speed { position: absolute; right: var(--gutter-r); bottom: 14px; text-align: right; line-height: 1; text-shadow: 0 2px 0 #000a; }
+#speed b { font-family: var(--font-display); font-weight: 400; font-size: 40px; }
+#speed span { font-size: 18px; font-weight: 700; margin-left: 4px; }
+#charge { height: 7px; margin-top: 6px; background: #0008; border-radius: 4px; overflow: hidden; }
+#charge i { display: block; height: 100%; width: 0; background: var(--ice); }
+#banner {
+  position: absolute; top: 34%; left: 16px; right: 16px; text-align: center;
+  font-family: var(--font-display); font-size: clamp(40px, 14vh, 120px); line-height: 1;
+  color: var(--sun); -webkit-text-stroke: 2px #000a; text-shadow: 0 5px 0 #0007;
+}
+#banner.small { font-size: clamp(24px, 6vh, 46px); color: var(--paper); }
+
+/* Tafeln */
+.board {
+  position: absolute; background: var(--asphalt); overflow: hidden auto;
+  overscroll-behavior: contain; touch-action: pan-y;
+}
+.curb { height: 12px; flex: none; background: repeating-linear-gradient(90deg, var(--curb) 0 28px, var(--paper) 28px 56px); }
+#menu {
+  top: 0; bottom: 0; left: 0; width: min(100%, calc(460px + var(--gutter-l)));
+  display: flex; flex-direction: column;
+  box-shadow: 8px 0 0 #0005;
+}
+.menu-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; padding-block: 18px 22px; padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
+h1 {
+  margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(40px, 11vw, 54px); line-height: .95;
+  color: var(--sun); transform: skewX(-8deg); transform-origin: left bottom; text-wrap: balance;
+}
+.tag { margin: 8px 0 0; color: var(--muted); font-size: 20px; }
+fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }
+legend, .label { padding: 0; margin-bottom: 8px; font-weight: 700; font-size: 16px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tracks button, .drivers button, .classes button {
+  background: var(--asphalt-2); border: 2px solid var(--line); border-radius: 6px; padding: 6px;
+}
+.tracks button { display: grid; gap: 2px; justify-items: center; text-align: center; min-width: 0; }
+.tracks canvas { width: 100%; max-width: 92px; aspect-ratio: 1; display: block; }
+.tracks b { font-size: 18px; line-height: 1.1; font-weight: 700; }
+.tracks small { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.classes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.classes button { font-weight: 700; padding: 8px 6px; }
+.classes small { display: block; font-weight: 500; font-size: 15px; color: var(--muted); }
+.drivers { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.drivers button { padding: 2px; aspect-ratio: 1; }
+.drivers canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+button[aria-pressed="true"] { border-color: var(--sun); background: #4a4230; }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; align-items: center; font-size: 16px; }
+.stats .who { grid-column: 1 / -1; font-weight: 700; font-size: 20px; }
+.meter { height: 8px; background: var(--asphalt-2); border-radius: 4px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--sun); }
+.cta {
+  border: 0; border-radius: 6px; background: var(--curb); color: #fff; padding: 12px 16px;
+  font-family: var(--font-display); font-size: 24px; transform: skewX(-6deg);
+}
+.cta:hover { background: #f44b40; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 17px; color: var(--muted); }
+.keys dt { color: var(--paper); font-weight: 700; }
+.keys dd { margin: 0; }
+
+.sheet {
+  top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(calc(100% - 32px), 460px); max-height: calc(100% - 32px);
+  display: flex; flex-direction: column; box-shadow: 0 10px 0 #0006;
+}
+.sheet-body { display: grid; gap: 14px; padding: 18px 20px 20px; }
+.sheet h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 34px; line-height: 1; color: var(--sun); }
+.sheet .note { margin: 0; color: var(--muted); }
+.results { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 20px; }
+.results td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.results td:first-child { font-weight: 700; width: 2em; }
+.results td:last-child { text-align: right; }
+.results tr.me td { color: var(--sun); font-weight: 700; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.row .cta { flex: 1 1 auto; font-size: 20px; }
+.ghost { flex: 1 1 auto; background: var(--asphalt-2); border: 2px solid var(--line); border-radius: 6px; padding: 10px 14px; font-weight: 700; }
+
+/* Touch */
+#touch { position: absolute; inset: 0; pointer-events: none; }
+#touch button {
+  position: absolute; pointer-events: auto; touch-action: none; width: 72px; height: 72px; border-radius: 50%;
+  background: #0006; border: 3px solid #fff9; font-weight: 700; font-size: 20px; color: #fff;
+}
+#tLeft { left: var(--gutter-l); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+#tRight { left: calc(var(--gutter-l) + 82px); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+#tDrift { right: var(--gutter-r); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+#tItem { right: calc(var(--gutter-r) + 82px); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+#tPause { right: var(--gutter-r); top: 96px; width: 52px !important; height: 52px !important; }
+body.touch #map { bottom: 124px; }
+body.touch #speed { display: none; }
+@media (max-width: 560px) {
+  #menu { width: 100%; box-shadow: none; }
+  #item { top: 74px; }
+}
+</style>
+
+<div id="stage">
+  <canvas id="view" aria-label="Rennstrecke aus der Fahrerperspektive"></canvas>
+
+  <div id="hud" hidden>
+    <div class="hud-left">
+      <div id="pos">6.<small>von 6</small></div>
+      <div id="lap">Runde 1/3</div>
+    </div>
+    <div class="hud-right">
+      <div id="time">0:00,00</div>
+      <div id="last"></div>
+    </div>
+    <div id="item" class="empty"></div>
+    <canvas id="map" width="200" height="200"></canvas>
+    <div id="speed"><b id="kmh">0</b><span>km/h</span><div id="charge"><i id="chargeBar"></i></div></div>
+    <div id="banner"></div>
+  </div>
+
+  <div id="touch" hidden>
+    <button id="tLeft" aria-label="Links lenken">◀</button>
+    <button id="tRight" aria-label="Rechts lenken">▶</button>
+    <button id="tItem">Item</button>
+    <button id="tDrift">Drift</button>
+    <button id="tPause" aria-label="Pause">II</button>
+  </div>
+
+  <section id="menu" class="board" aria-label="Rennen einstellen">
+    <div class="curb"></div>
+    <div class="menu-body">
+      <div>
+        <h1>Kurven&shy;könige</h1>
+        <p class="tag">Drei Runden, sechs Karts, ein Pokal.</p>
+      </div>
+      <fieldset><legend>Strecke</legend><div class="tracks" id="trackList"></div></fieldset>
+      <fieldset><legend>Klasse</legend><div class="classes" id="classList"></div></fieldset>
+      <fieldset>
+        <legend>Fahrer</legend>
+        <div class="drivers" id="driverList"></div>
+        <div class="stats" id="stats"></div>
+      </fieldset>
+      <button class="cta" id="go">Rennen starten</button>
+      <dl class="keys" id="keys">
+        <dt>Pfeile / WASD</dt><dd>Gas, Bremse, Lenken</dd>
+        <dt>Leertaste</dt><dd>Driften: halten, loslassen gibt Turbo</dd>
+        <dt>X oder E</dt><dd>Item benutzen</dd>
+        <dt>Esc, M</dt><dd>Pause, Ton an/aus</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section id="pause" class="board sheet" aria-label="Pause" hidden>
+    <div class="curb"></div>
+    <div class="sheet-body">
+      <h2>Boxenstopp</h2>
+      <div class="row">
+        <button class="cta" id="resume">Weiterfahren</button>
+        <button class="ghost" id="restart">Neu starten</button>
+        <button class="ghost" id="quit">Zum Menü</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="results" class="board sheet" aria-label="Ergebnis" hidden>
+    <div class="curb"></div>
+    <div class="sheet-body">
+      <h2 id="resTitle">Ziel!</h2>
+      <p class="note" id="resNote"></p>
+      <table class="results"><tbody id="resBody"></tbody></table>
+      <div class="row">
+        <button class="cta" id="again">Nochmal</button>
+        <button class="ghost" id="toMenu">Zum Menü</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+/* ---------- Helfer ---------- */
+const TAU = Math.PI * 2;
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const angDiff = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+const rngOf = seed => () => { seed = (seed * 1664525 + 1013904223) | 0; return (seed >>> 0) / 4294967296; };
+const fmtTime = t => {
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return m + ':' + s.toFixed(2).padStart(5, '0').replace('.', ',');
+};
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* Bestzeiten sind optional */ } },
+};
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- Daten ---------- */
+const MAP = 2048, STEP = 6, LAPS = 3;
+const THEMES = {
+  wiese: {
+    a: '#5fb548', b: '#54a640', road: '#5b5d68', road2: '#646672', edge: '#f7f2e6', shoulder: '#c9b57a',
+    skyT: '#2f8fe0', skyB: '#b9e6ff', hill: ['#7cc0a0', '#4f9a6e'], fog: '200,235,250', scenery: ['tree', 'tree', 'bush'],
+  },
+  wueste: {
+    a: '#e2b45f', b: '#d8a84f', road: '#6a5a55', road2: '#74645e', edge: '#f7f2e6', shoulder: '#b98545',
+    skyT: '#f08a3c', skyB: '#ffe3a6', hill: ['#d98d55', '#b5623c'], fog: '255,225,170', scenery: ['cactus', 'cactus', 'rock'],
+  },
+  schnee: {
+    a: '#e6f1f8', b: '#d8e7f1', road: '#63708a', road2: '#6d7a95', edge: '#f7f2e6', shoulder: '#b4cbdc',
+    skyT: '#27386e', skyB: '#a5c3e6', hill: ['#a9bfd9', '#6f88ad'], fog: '205,222,240', scenery: ['pine', 'pine', 'snowrock'],
+  },
+};
+const TRACKS = [
+  { id: 'sonnenring', name: 'Sonnenring', theme: 'wiese', width: 118, grip: 1, pads: [.3, .78],
+    pts: [[380,1300],[370,1000],[520,540],[960,360],[1320,540],[1700,420],[1810,860],[1480,1060],[1080,900],[860,1120],[1100,1380],[1560,1320],[1790,1560],[1480,1780],[860,1740],[470,1660]] },
+  { id: 'duenenpass', name: 'Dünenpass', theme: 'wueste', width: 108, grip: .92, pads: [.2, .62],
+    pts: [[1000,1770],[520,1730],[290,1420],[540,1130],[320,800],[420,400],[820,300],[920,640],[1130,900],[1400,820],[1230,430],[1570,290],[1790,640],[1540,950],[1770,1240],[1720,1640],[1360,1790]] },
+  { id: 'frostkurve', name: 'Frostkurve', theme: 'schnee', width: 112, grip: .62, pads: [.12, .55],
+    pts: [[1024,1800],[560,1790],[270,1510],[360,1180],[740,1250],[960,1040],[740,800],[330,770],[290,400],[700,250],[1120,420],[1430,270],[1790,420],[1730,820],[1380,890],[1340,1200],[1770,1270],[1790,1640],[1450,1790]] },
+];
+const CLASSES = [
+  { name: '50 ccm', hint: 'gemütlich', top: 195, acc: 120, ai: .9, rival: .98 },
+  { name: '100 ccm', hint: 'sportlich', top: 235, acc: 135, ai: .96, rival: 1.02 },
+  { name: '150 ccm', hint: 'wild', top: 275, acc: 150, ai: 1, rival: 1.05 },
+];
+const DRIVERS = [
+  { name: 'Fuchs', animal: 'fox', kart: '#e5342b', trim: '#ffc72c', head: '#ee7a2c', body: '#f7f2e6', stats: { top: 1, acc: 1, hand: 1 } },
+  { name: 'Frosch', animal: 'frog', kart: '#f0c419', trim: '#2f7f3f', head: '#62bb4a', body: '#2f7f3f', stats: { top: .97, acc: 1.16, hand: 1.02 } },
+  { name: 'Pinguin', animal: 'penguin', kart: '#29a9e0', trim: '#f7f2e6', head: '#2a2e3e', body: '#2a2e3e', stats: { top: .98, acc: .98, hand: 1.14 } },
+  { name: 'Schwein', animal: 'pig', kart: '#d9408e', trim: '#ffd9e8', head: '#f6a5bd', body: '#6f3a8c', stats: { top: .96, acc: 1.1, hand: 1.08 } },
+  { name: 'Bär', animal: 'bear', kart: '#2fa35a', trim: '#f0c419', head: '#8b5a34', body: '#c94b2f', stats: { top: 1.06, acc: .9, hand: .94 } },
+  { name: 'Maus', animal: 'mouse', kart: '#7a4fd0', trim: '#ff9a3c', head: '#a9afbd', body: '#ff9a3c', stats: { top: 1.03, acc: .96, hand: .98 } },
+];
+const ICONS = {
+  turbo: '<svg viewBox="0 0 48 48"><path d="M24 3c3 9 14 14 14 27a14 14 0 0 1-28 0c0-7 4-10 6-15 2 3 3 5 4 6 3-5 5-11 4-18z" fill="#ff7a1a"/><path d="M24 22c1 5 7 7 7 13a7 7 0 0 1-14 0c0-4 5-7 7-13z" fill="#ffd93b"/></svg>',
+  rakete: '<svg viewBox="0 0 48 48"><path d="M24 3c7 6 9 14 9 22v9H15v-9c0-8 2-16 9-22z" fill="#e5342b"/><circle cx="24" cy="20" r="5" fill="#bfeaff" stroke="#f7f2e6" stroke-width="2"/><path d="M15 26l-7 11h7zM33 26l7 11h-7z" fill="#ffc72c"/><path d="M19 34h10l-5 12z" fill="#ff7a1a"/></svg>',
+  oel: '<svg viewBox="0 0 48 48"><path d="M24 4c5 9 15 17 15 27a15 15 0 0 1-30 0C9 21 19 13 24 4z" fill="#1c1a28" stroke="#6b5fb0" stroke-width="3"/><path d="M16 30c0 4 3 7 7 8" stroke="#b49bff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
+  schild: '<svg viewBox="0 0 48 48"><path d="M24 4l17 6v13c0 11-7 18-17 22C14 41 7 34 7 23V10z" fill="#29a9e0" stroke="#f7f2e6" stroke-width="3"/><path d="M17 24l5 6 10-12" stroke="#f7f2e6" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const ITEM_KEYS = Object.keys(ICONS);
+
+/* ---------- Strecke aufbauen ---------- */
+function buildTrack(def) {
+  const P = def.pts, n = P.length, dense = [];
+  const cr = (a, b, c, d, t) => .5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
+  for (let i = 0; i < n; i++) {
+    const a = P[(i + n - 1) % n], b = P[i], c = P[(i + 1) % n], d = P[(i + 2) % n];
+    for (let t = 0; t < 1; t += 1 / 60) dense.push([cr(a[0], b[0], c[0], d[0], t), cr(a[1], b[1], c[1], d[1], t)]);
+  }
+  let len = 0;
+  const seg = dense.map((p, i) => { const q = dense[(i + 1) % dense.length], l = Math.hypot(q[0] - p[0], q[1] - p[1]); len += l; return l; });
+  const N = Math.floor(len / STEP), px = new Float32Array(N), py = new Float32Array(N), tx = new Float32Array(N), ty = new Float32Array(N), curv = new Float32Array(N);
+  let at = 0, j = 0, walked = 0;
+  for (let i = 0; i < N; i++) {
+    const want = i * len / N;
+    while (walked + seg[j] < want) { walked += seg[j]; j = (j + 1) % dense.length; }
+    const u = (want - walked) / seg[j], p = dense[j], q = dense[(j + 1) % dense.length];
+    px[i] = lerp(p[0], q[0], u); py[i] = lerp(p[1], q[1], u);
+  }
+  const ang = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = (i + 2) % N, b = (i + N - 2) % N, dx = px[a] - px[b], dy = py[a] - py[b], l = Math.hypot(dx, dy) || 1;
+    tx[i] = dx / l; ty[i] = dy / l; ang[i] = Math.atan2(dy, dx);
+  }
+  for (let i = 0; i < N; i++) curv[i] = Math.abs(angDiff(ang[(i + 4) % N], ang[(i + N - 4) % N])) / (8 * len / N);
+  return { def, N, px, py, tx, ty, curv, len, half: def.width / 2, grip: def.grip, theme: THEMES[def.theme] };
+}
+TRACKS.forEach(d => { d.built = buildTrack(d); });
+
+function nearestIdx(tr, x, y) {
+  let best = 0, bd = 1e12;
+  const { N, px, py } = tr;
+  for (let i = 0; i < N; i += 2) {
+    const dx = px[i] - x, dy = py[i] - y, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+
+/* Bodentextur, Mipmaps und Oberflaechen-Maske pro Strecke, einmal gebaut */
+function bakeMap(tr) {
+  if (tr.mips) return;
+  const th = tr.theme, N = tr.N, c = document.createElement('canvas');
+  c.width = c.height = MAP;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  for (let y = 0; y < MAP; y += 64) for (let x = 0; x < MAP; x += 64) {
+    g.fillStyle = ((x >> 6) ^ (y >> 6)) & 1 ? th.a : th.b;
+    g.fillRect(x, y, 64, 64);
+  }
+  const rnd = rngOf(tr.N * 7 + 3);
+  g.fillStyle = '#0000000f';
+  for (let i = 0; i < 26000; i++) g.fillRect(rnd() * MAP | 0, rnd() * MAP | 0, 3, 3);
+  g.fillStyle = '#ffffff14';
+  for (let i = 0; i < 26000; i++) g.fillRect(rnd() * MAP | 0, rnd() * MAP | 0, 3, 3);
+
+  const path = new Path2D();
+  for (let i = 0; i < N; i++) i ? path.lineTo(tr.px[i], tr.py[i]) : path.moveTo(tr.px[i], tr.py[i]);
+  path.closePath();
+  g.lineJoin = g.lineCap = 'round';
+  const w = tr.def.width;
+  g.strokeStyle = th.shoulder; g.lineWidth = w + 34; g.stroke(path);
+  g.strokeStyle = th.edge; g.lineWidth = w + 8; g.stroke(path);
+  // Curbs nur in echten Kurven
+  g.lineCap = 'butt';
+  for (let i = 0; i < N; i++) {
+    if (tr.curv[i] < .0028) continue;
+    const a = (i + 1) % N, red = (i >> 2) & 1;
+    g.strokeStyle = red ? '#e5342b' : '#f7f2e6'; g.lineWidth = w + 22;
+    g.beginPath(); g.moveTo(tr.px[i], tr.py[i]); g.lineTo(tr.px[a], tr.py[a]); g.stroke();
+  }
+  g.lineCap = 'round';
+  g.strokeStyle = th.road; g.lineWidth = w; g.stroke(path);
+  g.save(); g.clip(strokeRegion(tr, w));
+  g.fillStyle = th.road2;
+  for (let i = 0; i < 16000; i++) g.fillRect(rnd() * MAP | 0, rnd() * MAP | 0, 4, 3);
+  g.restore();
+  g.setLineDash([30, 42]); g.strokeStyle = '#ffffff30'; g.lineWidth = 4; g.stroke(path); g.setLineDash([]);
+
+  // Startlinie
+  const sq = 13, rows = 2, cols = Math.ceil(w / sq);
+  g.save(); g.translate(tr.px[0], tr.py[0]); g.rotate(Math.atan2(tr.ty[0], tr.tx[0]));
+  for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+    g.fillStyle = (r + q) & 1 ? '#15161c' : '#f7f2e6';
+    g.fillRect(r * sq, q * sq - w / 2, sq, sq);
+  }
+  g.restore();
+
+  // Boost-Felder
+  tr.pads = tr.def.pads.map(f => {
+    const i = Math.floor(f * N), a = Math.atan2(tr.ty[i], tr.tx[i]);
+    g.save(); g.translate(tr.px[i], tr.py[i]); g.rotate(a);
+    g.fillStyle = '#ffc72c'; g.fillRect(-40, -34, 80, 68);
+    for (let k = 0; k < 3; k++) {
+      g.fillStyle = k & 1 ? '#ff7a1a' : '#e5342b';
+      g.beginPath();
+      const o = -34 + k * 24;
+      g.moveTo(o, -28); g.lineTo(o + 14, -28); g.lineTo(o + 34, 0); g.lineTo(o + 14, 28); g.lineTo(o, 28); g.lineTo(o + 20, 0); g.closePath(); g.fill();
+    }
+    g.restore();
+    return { x: tr.px[i], y: tr.py[i] };
+  });
+
+  // Mipmaps
+  const base = g.getImageData(0, 0, MAP, MAP).data;
+  const mips = [{ size: MAP, data: new Uint32Array(base.buffer.slice(0)) }];
+  let prev = new Uint8Array(base.buffer.slice(0)), size = MAP;
+  for (let l = 1; l <= 4; l++) {
+    const s = size >> 1, out = new Uint8Array(s * s * 4);
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+      const a = (y * 2 * size + x * 2) * 4, b = a + 4, c2 = a + size * 4, d = c2 + 4, o = (y * s + x) * 4;
+      out[o] = (prev[a] + prev[b] + prev[c2] + prev[d]) >> 2;
+      out[o + 1] = (prev[a + 1] + prev[b + 1] + prev[c2 + 1] + prev[d + 1]) >> 2;
+      out[o + 2] = (prev[a + 2] + prev[b + 2] + prev[c2 + 2] + prev[d + 2]) >> 2;
+      out[o + 3] = 255;
+    }
+    mips.push({ size: s, data: new Uint32Array(out.buffer) });
+    prev = out; size = s;
+  }
+  tr.mips = mips;
+  const hex = h => { const v = parseInt(h.slice(1), 16); return (255 << 24 | (v & 255) << 16 | (v >> 8 & 255) << 8 | v >> 16) >>> 0; };
+  tr.outA = hex(th.a); tr.outB = hex(th.b);
+
+  // Oberflaechen-Maske: 1 = Strasse
+  const mc = document.createElement('canvas'); mc.width = mc.height = 512;
+  const mg = mc.getContext('2d', { willReadFrequently: true });
+  mg.fillStyle = '#000'; mg.fillRect(0, 0, 512, 512); mg.scale(.25, .25);
+  mg.strokeStyle = '#fff'; mg.lineWidth = w + 16; mg.lineJoin = mg.lineCap = 'round'; mg.stroke(path);
+  const md = mg.getImageData(0, 0, 512, 512).data;
+  tr.mask = new Uint8Array(512 * 512);
+  for (let i = 0; i < tr.mask.length; i++) tr.mask[i] = md[i * 4] > 128 ? 1 : 0;
+
+  // Deko abseits der Strasse
+  tr.scenery = [];
+  const r2 = rngOf(tr.N * 13 + 5);
+  for (let t = 0; t < 2600 && tr.scenery.length < 190; t++) {
+    const x = 40 + r2() * (MAP - 80), y = 40 + r2() * (MAP - 80);
+    const i = nearestIdx(tr, x, y), d = Math.hypot(tr.px[i] - x, tr.py[i] - y);
+    if (d < tr.half + 52 || d > tr.half + 300) continue;
+    if (tr.scenery.some(s => Math.hypot(s.x - x, s.y - y) < 42)) continue;
+    tr.scenery.push({ x, y, kind: th.scenery[r2() * th.scenery.length | 0] });
+  }
+
+  // Item-Boxen in Reihen quer zur Fahrbahn
+  tr.boxes = [];
+  for (const f of [.1, .36, .58, .86]) {
+    const i = Math.floor(f * N), nx = -tr.ty[i], ny = tr.tx[i];
+    for (const o of [-.66, -.22, .22, .66]) tr.boxes.push({ x: tr.px[i] + nx * o * tr.half, y: tr.py[i] + ny * o * tr.half, wait: 0 });
+  }
+}
+function strokeRegion(tr, w) {
+  const p = new Path2D(), N = tr.N;
+  for (let i = 0; i <= N; i++) { const k = i % N, x = tr.px[k] - tr.ty[k] * w / 2, y = tr.py[k] + tr.tx[k] * w / 2; i ? p.lineTo(x, y) : p.moveTo(x, y); }
+  for (let i = N; i >= 0; i--) { const k = i % N; p.lineTo(tr.px[k] + tr.ty[k] * w / 2, tr.py[k] - tr.tx[k] * w / 2); }
+  p.closePath();
+  return p;
+}
+const onRoad = (tr, x, y) => { const u = x / 4 | 0, v = y / 4 | 0; return u >= 0 && v >= 0 && u < 512 && v < 512 && tr.mask[v * 512 + u] === 1; };
+
+/* ---------- Sprites: Karts als gedrehte Voxelmodelle ---------- */
+const CELL = 144, FRAMES = 32, VOX_PX = 3, VOX_WORLD = .6, CELL_WORLD = CELL / VOX_PX * VOX_WORLD, PIVOT = 98 / CELL;
+function kartVoxels(d) {
+  const m = new Map();
+  const put = (x, y, z, col) => m.set(x + ',' + y + ',' + z, [x, y, z, col]);
+  const box = (x0, x1, y0, y1, z0, z1, col) => { for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) for (let z = z0; z < z1; z++) put(x, y, z, col); };
+  const ball = (cx, cy, cz, r, col) => {
+    const R = Math.ceil(r);
+    for (let x = -R; x <= R; x++) for (let y = -R; y <= R; y++) for (let z = -R; z <= R; z++)
+      if (x * x + y * y + z * z <= r * r) put(cx + x, cy + y, cz + z, col);
+  };
+  const dark = '#23252e', metal = '#8d93a3';
+  box(-10, 10, -5, 5, 2, 4, d.kart);           // Boden
+  box(10, 14, -3, 3, 2, 4, d.kart);            // Nase
+  box(14, 15, -6, 6, 1, 3, d.trim);            // Stossstange
+  box(-6, 5, -8, -5, 2, 6, d.kart); box(-6, 5, 5, 8, 2, 6, d.kart); // Seitenkaesten
+  box(-5, 4, -8, -5, 6, 7, d.trim); box(-5, 4, 5, 8, 6, 7, d.trim);
+  box(-9, -5, -4, 4, 4, 11, dark);             // Sitz
+  box(-13, -9, -4, 4, 3, 7, metal);            // Motor
+  box(-15, -13, -4, -2, 4, 6, dark); box(-15, -13, 2, 4, 4, 6, dark); // Auspuff
+  box(-14, -11, -9, 9, 11, 12, d.trim);        // Heckfluegel
+  box(-13, -12, -7, -6, 7, 11, dark); box(-13, -12, 6, 7, 7, 11, dark);
+  for (const y of [-11, 8]) { box(6, 11, y, y + 3, 0, 5, dark); box(-11, -5, y, y + 3, 0, 6, dark); }
+  box(7, 10, -11 + 3, -8 + 3, 2, 3, metal);
+  box(1, 3, -2, 2, 6, 9, dark);                // Lenkrad
+  box(-5, 0, -4, 4, 4, 11, d.body);            // Rumpf
+  const hz = 15, hx = -2;
+  ball(hx, 0, hz, 5.4, d.head);
+  const eye = (y, z, x = hx + 5) => { put(x, y, z, '#fff'); put(x + 1, y, z, '#15161c'); };
+  if (d.animal === 'fox') {
+    box(hx - 1, hx + 2, -5, -2, hz + 4, hz + 8, d.head); box(hx - 1, hx + 2, 2, 5, hz + 4, hz + 8, d.head);
+    box(hx - 1, hx + 2, -5, -2, hz + 7, hz + 8, '#23252e'); box(hx - 1, hx + 2, 2, 5, hz + 7, hz + 8, '#23252e');
+    box(hx + 4, hx + 8, -2, 3, hz - 3, hz, '#f7f2e6'); put(hx + 8, 0, hz - 1, '#15161c'); eye(-3, hz + 1); eye(3, hz + 1);
+  } else if (d.animal === 'frog') {
+    ball(hx + 1, -3, hz + 5, 2.4, d.head); ball(hx + 1, 3, hz + 5, 2.4, d.head);
+    put(hx + 3, -3, hz + 6, '#fff'); put(hx + 4, -3, hz + 6, '#15161c'); put(hx + 3, 3, hz + 6, '#fff'); put(hx + 4, 3, hz + 6, '#15161c');
+    box(hx + 5, hx + 6, -3, 4, hz - 2, hz - 1, '#2f7f3f');
+  } else if (d.animal === 'penguin') {
+    ball(hx + 2, 0, hz - 1, 4, '#f7f2e6'); box(hx + 6, hx + 9, -1, 2, hz - 1, hz + 1, '#ff9a3c'); eye(-2, hz + 2); eye(2, hz + 2);
+  } else if (d.animal === 'pig') {
+    box(hx - 1, hx + 1, -5, -3, hz + 4, hz + 6, d.head); box(hx - 1, hx + 1, 3, 5, hz + 4, hz + 6, d.head);
+    box(hx + 5, hx + 8, -2, 3, hz - 2, hz + 1, '#ef8aa8'); put(hx + 8, -1, hz - 1, '#8a3d55'); put(hx + 8, 1, hz - 1, '#8a3d55'); eye(-3, hz + 2); eye(3, hz + 2);
+  } else if (d.animal === 'bear') {
+    ball(hx, -5, hz + 4, 2.4, d.head); ball(hx, 5, hz + 4, 2.4, d.head);
+    box(hx + 4, hx + 7, -2, 3, hz - 3, hz, '#d3a877'); put(hx + 7, 0, hz - 1, '#15161c'); eye(-3, hz + 1); eye(3, hz + 1);
+  } else {
+    ball(hx - 1, -6, hz + 4, 3.6, d.head); ball(hx - 1, 6, hz + 4, 3.6, d.head);
+    ball(hx, -6, hz + 4, 2.2, '#f2a7b6'); ball(hx, 6, hz + 4, 2.2, '#f2a7b6');
+    box(hx + 5, hx + 7, -1, 2, hz - 2, hz, '#d8dbe4'); put(hx + 7, 0, hz - 1, '#e0587a'); eye(-3, hz + 1); eye(3, hz + 1);
+  }
+  return m;
+}
+function shade(hex, f) {
+  const v = parseInt(hex.slice(1), 16);
+  return 'rgb(' + Math.min(255, (v >> 16) * f | 0) + ',' + Math.min(255, (v >> 8 & 255) * f | 0) + ',' + Math.min(255, (v & 255) * f | 0) + ')';
+}
+function bakeKart(d) {
+  const sheet = document.createElement('canvas');
+  sheet.width = CELL * FRAMES; sheet.height = CELL;
+  const g = sheet.getContext('2d', { willReadFrequently: true });
+  const vox = kartVoxels(d), list = [];
+  const has = (x, y, z) => vox.has(x + ',' + y + ',' + z);
+  for (const [x, y, z, col] of vox.values()) {
+    if (has(x + 1, y, z) && has(x - 1, y, z) && has(x, y + 1, z) && has(x, y - 1, z) && has(x, y, z + 1) && has(x, y, z - 1)) continue;
+    const top = !has(x, y, z + 1);
+    list.push({ x, y, z, top: shade(col, 1.14), left: shade(col, .9), right: shade(col, .72), isTop: top, open: [!has(x, y - 1, z), !has(x, y + 1, z)] });
+  }
+  const pitch = .42, sp = Math.sin(pitch), cp = Math.cos(pitch);
+  for (let f = 0; f < FRAMES; f++) {
+    const th = f / FRAMES * TAU, s = Math.sin(th), c = Math.cos(th), ox = f * CELL + CELL / 2, oy = CELL * PIVOT;
+    for (const v of list) {
+      v.rx = v.x * c - v.y * s; v.ry = v.x * s + v.y * c;
+      v.d = v.rx * cp - v.z * sp;
+    }
+    list.sort((a, b) => b.d - a.d);
+    for (const v of list) {
+      g.fillStyle = v.isTop ? v.top : (v.ry < 0 ? v.left : v.right);
+      g.fillRect(Math.round(ox + v.ry * VOX_PX - 2), Math.round(oy - (v.z * cp + v.rx * sp) * VOX_PX - 2), 4, 4);
+    }
+  }
+  // dunkle Kontur, damit das Kart vom Boden abhebt
+  const im = g.getImageData(0, 0, sheet.width, CELL), px = im.data, w = sheet.width, src = px.slice();
+  for (let y = 1; y < CELL - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const o = (y * w + x) * 4;
+    if (src[o + 3]) continue;
+    if (src[o + 3 + 4] || src[o + 3 - 4] || src[o + 3 + w * 4] || src[o + 3 - w * 4]) { px[o] = 18; px[o + 1] = 18; px[o + 2] = 26; px[o + 3] = 255; }
+  }
+  g.putImageData(im, 0, 0);
+  return sheet;
+}
+DRIVERS.forEach(d => { d.sheet = bakeKart(d); });
+
+function sprite(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d')); return c; }
+const blob = (g, x, y, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); };
+const SCENERY = {
+  tree: { h: 58, c: sprite(48, 64, g => {
+    g.fillStyle = '#6b4526'; g.fillRect(20, 40, 9, 24);
+    blob(g, 24, 28, 19, '#2f7f3f'); blob(g, 14, 34, 11, '#2f7f3f'); blob(g, 34, 34, 11, '#2f7f3f'); blob(g, 20, 22, 11, '#46a052'); blob(g, 29, 17, 6, '#6fc46b');
+  }) },
+  bush: { h: 22, c: sprite(40, 24, g => { blob(g, 12, 15, 9, '#2f7f3f'); blob(g, 28, 15, 9, '#2f7f3f'); blob(g, 20, 10, 9, '#46a052'); blob(g, 15, 9, 2, '#e5342b'); blob(g, 27, 12, 2, '#e5342b'); }) },
+  cactus: { h: 50, c: sprite(36, 60, g => {
+    g.fillStyle = '#2f8a57'; g.fillRect(13, 6, 10, 54); g.fillRect(3, 24, 6, 16); g.fillRect(3, 36, 12, 6); g.fillRect(27, 16, 6, 16); g.fillRect(21, 28, 12, 6);
+    g.fillStyle = '#4fb377'; g.fillRect(15, 6, 3, 54); g.fillRect(4, 24, 2, 16); g.fillRect(28, 16, 2, 16);
+  }) },
+  rock: { h: 24, c: sprite(44, 26, g => { g.fillStyle = '#a06a3f'; g.beginPath(); g.moveTo(2, 26); g.lineTo(10, 7); g.lineTo(24, 2); g.lineTo(38, 10); g.lineTo(43, 26); g.fill(); g.fillStyle = '#c28a55'; g.beginPath(); g.moveTo(10, 7); g.lineTo(24, 2); g.lineTo(22, 16); g.fill(); }) },
+  pine: { h: 66, c: sprite(44, 72, g => {
+    g.fillStyle = '#5a3a24'; g.fillRect(18, 58, 8, 14);
+    for (let i = 0; i < 3; i++) { const y = 6 + i * 16, w = 12 + i * 5; g.fillStyle = '#23604f'; g.beginPath(); g.moveTo(22, y); g.lineTo(22 - w - 2, y + 26); g.lineTo(22 + w + 2, y + 26); g.fill(); g.fillStyle = '#f7fbff'; g.beginPath(); g.moveTo(22, y); g.lineTo(22 - w * .6, y + 13); g.lineTo(22 + w * .6, y + 13); g.fill(); }
+  }) },
+  snowrock: { h: 22, c: sprite(44, 24, g => { g.fillStyle = '#7f93aa'; g.beginPath(); g.moveTo(2, 24); g.lineTo(12, 6); g.lineTo(28, 2); g.lineTo(42, 24); g.fill(); g.fillStyle = '#f7fbff'; g.beginPath(); g.moveTo(9, 11); g.lineTo(12, 6); g.lineTo(28, 2); g.lineTo(34, 12); g.lineTo(22, 10); g.fill(); }) },
+};
+const BOXES = [0, 60, 120, 200, 280, 330].map(h => sprite(32, 32, g => {
+  g.fillStyle = `hsl(${h} 95% 58%)`; g.fillRect(2, 2, 28, 28);
+  g.fillStyle = `hsl(${h} 95% 76%)`; g.fillRect(2, 2, 28, 5); g.fillRect(2, 2, 5, 28);
+  g.fillStyle = `hsl(${h} 90% 36%)`; g.fillRect(2, 27, 28, 3); g.fillRect(27, 2, 3, 28);
+  g.fillStyle = '#fff'; g.font = '900 22px "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 16, 17);
+}));
+const OIL = sprite(48, 20, g => { g.fillStyle = '#17141f'; g.beginPath(); g.ellipse(24, 10, 23, 9, 0, 0, TAU); g.fill(); g.fillStyle = '#6b5fb0'; g.beginPath(); g.ellipse(17, 8, 7, 2, 0, 0, TAU); g.fill(); g.fillStyle = '#c56bb0'; g.beginPath(); g.ellipse(31, 12, 5, 1.5, 0, 0, TAU); g.fill(); });
+const ROCKET = sprite(24, 24, g => { g.fillStyle = '#e5342b'; g.beginPath(); g.moveTo(12, 1); g.lineTo(21, 15); g.lineTo(3, 15); g.fill(); g.fillStyle = '#f7f2e6'; g.fillRect(5, 15, 14, 4); g.fillStyle = '#ffc72c'; g.fillRect(8, 19, 8, 4); });
+
+/* ---------- Spielzustand ---------- */
+const canvas = $('view'), ctx = canvas.getContext('2d', { alpha: false });
+const view = { W: 640, H: 360, hz: 108, f: 333 };
+let img, frame;
+function resize() {
+  const r = $('stage').getBoundingClientRect(), asp = (r.width || 16) / (r.height || 9);
+  const wide = asp >= 1.2;
+  let W, H;
+  if (wide) { H = 360; W = Math.round(H * clamp(asp, 1.2, 2.4)) & ~1; } else { H = 720; W = Math.round(H * asp) & ~1; }
+  canvas.width = W; canvas.height = H;
+  view.W = W; view.H = H; view.hz = Math.round(H * (wide ? .3 : .4)); view.f0 = view.f = wide ? Math.min(W * .52, H * .93) : W * .9;
+  img = ctx.createImageData(W, H); frame = new Uint32Array(img.data.buffer);
+  ctx.imageSmoothingEnabled = false;
+  G.tr && bakeBackdrop(G.tr);
+}
+const G = {
+  state: 'menu', tr: null, trackI: 0, cls: 1, drv: 0, karts: [], me: null, t: 0, cd: 0, rockets: [], oils: [], fx: [],
+  cam: { x: 0, y: 0, a: 0, h: 27, dist: 58, kick: 0 }, boxT: 0, gasEarly: -1, last: 0, wrong: 0, sky: null, finishList: [],
+};
+
+function makeKart(d, i, ai) {
+  const tr = G.tr, idx = (tr.N - 6 - i * 3 + tr.N) % tr.N, side = i & 1 ? 1 : -1;
+  const nx = -tr.ty[idx], ny = tr.tx[idx], a = Math.atan2(tr.ty[idx], tr.tx[idx]);
+  const rnd = Math.random;
+  return {
+    d, ai, x: tr.px[idx] + nx * side * 24, y: tr.py[idx] + ny * side * 24, a, move: a, v: 0, steer: 0, z: 0, hop: 0,
+    idx, f: idx / tr.N, lap: 0, cp: 4, prog: 1, rank: 0, lapStart: 0, bestLap: 0, finished: 0,
+    boost: 0, shield: 0, spin: 0, spinA: 0, drift: 0, charge: 0, off: false, padCd: 0,
+    item: null, roll: 0, useIn: 0, stuck: 0,
+    aiLat: (rnd() - .5) * .9, aiLatT: 0, aiNow: 0, aiMul: 1, aiTop: .96 + rnd() * .04,
+    rival: ai && i < 2, aiCurve: 0,
+  };
+}
+
+function setupRace(demo) {
+  const def = TRACKS[G.trackI];
+  G.tr = def.built; bakeMap(G.tr); bakeBackdrop(G.tr);
+  G.rockets = []; G.oils = []; G.fx = []; G.tr.boxes.forEach(b => { b.wait = 0; });
+  const order = DRIVERS.map((d, i) => i).filter(i => i !== G.drv).sort(() => Math.random() - .5);
+  order.push(G.drv);
+  G.karts = order.map((di, i) => makeKart(DRIVERS[di], i, demo || di !== G.drv));
+  G.me = G.karts[5];
+  G.t = 0; G.gasEarly = -1; G.wrong = 0;
+  const c = G.cam, k = G.me; c.a = k.a; c.x = k.x - Math.cos(c.a) * c.dist; c.y = k.y - Math.sin(c.a) * c.dist;
+}
+
+/* Himmel: Verlauf + scrollender Bergstreifen */
+function bakeBackdrop(tr) {
+  const th = tr.theme, hz = view.hz, W = 1024, H = Math.max(hz, 40);
+  G.sky = sprite(W, H, g => {
+    const r = rngOf(tr.N);
+    g.clearRect(0, 0, W, H);
+    th.hill.forEach((col, l) => {
+      const p = [r() * TAU, r() * TAU, r() * TAU], amp = (l ? .26 : .46) * H, base = H - (l ? .08 : .16) * H;
+      g.fillStyle = col; g.beginPath(); g.moveTo(0, H);
+      for (let x = 0; x <= W; x += 4) {
+        const u = x / W * TAU;
+        g.lineTo(x, Math.round((base - amp * (.5 + .28 * Math.sin(u * 2 + p[0]) + .16 * Math.sin(u * 5 + p[1]) + .06 * Math.sin(u * 13 + p[2]))) / 2) * 2);
+      }
+      g.lineTo(W, H); g.fill();
+    });
+  });
+  G.clouds = sprite(W, H, g => {
+    const r = rngOf(tr.N + 9);
+    g.fillStyle = '#ffffffb0';
+    for (let i = 0; i < 9; i++) {
+      const x = r() * (W - 90), y = 6 + r() * H * .45, w = 40 + r() * 50;
+      g.fillRect(x | 0, y | 0, w | 0, 6); g.fillRect((x + w * .2) | 0, (y - 6) | 0, (w * .5) | 0, 6);
+    }
+  });
+  const g = sprite(4, hz + 1, c => { const l = c.createLinearGradient(0, 0, 0, hz); l.addColorStop(0, th.skyT); l.addColorStop(1, th.skyB); c.fillStyle = l; c.fillRect(0, 0, 4, hz + 1); });
+  G.skyGrad = g;
+  G.fog = ctx.createLinearGradient(0, hz, 0, hz + 46);
+  G.fog.addColorStop(0, `rgba(${th.fog},.8)`); G.fog.addColorStop(1, `rgba(${th.fog},0)`);
+}
+
+/* ---------- Eingabe ---------- */
+const keys = new Set(), touch = { left: false, right: false, drift: false };
+let touchMode = false, itemPressed = false;
+const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'];
+addEventListener('keydown', e => {
+  if (GAME_KEYS.includes(e.code) && (G.state !== 'menu' || e.target === document.body)) e.preventDefault();
+  if (e.repeat) return;
+  keys.add(e.code);
+  if (e.code === 'KeyX' || e.code === 'KeyE') itemPressed = true;
+  if (e.code === 'KeyM') Snd.toggle();
+  if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
+});
+addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('blur', () => { keys.clear(); if (G.state === 'race') togglePause(); });
+
+function readInput() {
+  const left = keys.has('ArrowLeft') || keys.has('KeyA') || touch.left, right = keys.has('ArrowRight') || keys.has('KeyD') || touch.right;
+  return {
+    steer: (right ? 1 : 0) - (left ? 1 : 0),
+    gas: keys.has('ArrowUp') || keys.has('KeyW') || touchMode,
+    brake: keys.has('ArrowDown') || keys.has('KeyS'),
+    drift: keys.has('Space') || keys.has('ShiftLeft') || touch.drift,
+  };
+}
+function hold(id, on, off) {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); el.setPointerCapture(e.pointerId); on(); });
+  for (const t of ['pointerup', 'pointercancel']) el.addEventListener(t, () => off && off());
+}
+hold('tLeft', () => { touch.left = true; }, () => { touch.left = false; });
+hold('tRight', () => { touch.right = true; }, () => { touch.right = false; });
+hold('tDrift', () => { touch.drift = true; }, () => { touch.drift = false; });
+hold('tItem', () => { itemPressed = true; });
+hold('tPause', () => togglePause());
+addEventListener('touchstart', () => {
+  if (touchMode) return;
+  touchMode = true; document.body.classList.add('touch'); $('keys').hidden = true;
+  if (G.state !== 'menu') $('touch').hidden = false;
+}, { passive: true });
+
+/* ---------- Physik ---------- */
+function updateKart(k, dt, inp) {
+  const tr = G.tr, c = CLASSES[G.cls], st = k.d.stats, grip = tr.grip;
+  let top = c.top * st.top * (k.ai ? k.aiMul : 1), acc = c.acc * st.acc;
+  k.off = !onRoad(tr, k.x, k.y);
+  k.padCd -= dt;
+  if (k.boost > 0) { k.boost -= dt; top *= 1.4; acc *= 3.2; }
+  if (k.shield > 0) { k.shield -= dt; top *= 1.1; acc *= 1.4; }
+  if (k.off && k.boost <= 0 && k.shield <= 0) top *= .42;
+
+  let steer = inp.steer;
+  if (k.spin > 0) {
+    k.spin -= dt; k.spinA += dt * 15; k.v *= 1 - 2.8 * dt;
+    if (k.spin <= 0) k.spinA = 0;
+    steer = 0; inp = { steer: 0, gas: false, brake: false, drift: false };
+  }
+  k.steer = lerp(k.steer, steer, Math.min(1, dt * 11));
+
+  if (k.v > top) k.v -= (k.v - top) * 2.4 * dt;
+  else if (inp.gas) k.v += acc * (1 - .72 * Math.max(0, k.v) / top) * dt;
+  else if (!inp.brake) k.v *= 1 - .75 * dt;
+  if (inp.brake) k.v = k.v > 0 ? k.v - 260 * dt : Math.max(-70, k.v - 110 * dt);
+
+  // Driften
+  if (inp.drift && !k.drift && k.v > 90 && Math.abs(k.steer) > .3 && k.hop <= 0 && k.spin <= 0 && !k.off) {
+    k.drift = Math.sign(k.steer); k.charge = 0; k.hop = .26;
+    if (k === G.me) Snd.tone(420, .07, 'square', .05);
+  }
+  if (k.drift && (!inp.drift || k.v < 60 || k.spin > 0 || k.off)) {
+    const earned = k.spin > 0 || k.off ? 0 : k.charge > 1.5 ? 1.15 : k.charge > .65 ? .6 : 0;
+    if (earned) { k.boost = Math.max(k.boost, earned); if (k === G.me) Snd.boost(); }
+    k.drift = 0; k.charge = 0;
+  }
+  if (k.hop > 0) { k.hop -= dt; k.z = Math.sin(clamp(k.hop / .26, 0, 1) * Math.PI) * 4; } else k.z = 0;
+
+  const speedF = clamp(Math.abs(k.v) / 70, 0, 1), turnRate = 2.7 * st.hand;
+  const load = 1 - .34 * clamp(Math.abs(k.v) / c.top, 0, 1.2);
+  let turn;
+  if (k.drift) {
+    k.charge += dt;
+    turn = k.drift * (.68 + .52 * k.steer * k.drift) * turnRate * 1.12;
+    if (Math.random() < .7) spark(k);
+  } else turn = k.steer * turnRate * speedF * load;
+  k.a += turn * dt * (k.v < -2 ? -1 : 1);
+
+  const g2 = (k.drift ? 2.7 : 10) * grip;
+  k.move += angDiff(k.a, k.move) * Math.min(1, g2 * dt);
+  if (k.v < 0) k.move = k.a;
+  k.x += Math.cos(k.move) * k.v * dt;
+  k.y += Math.sin(k.move) * k.v * dt;
+
+  if (k.x < 24 || k.x > MAP - 24 || k.y < 24 || k.y > MAP - 24) {
+    k.x = clamp(k.x, 24, MAP - 24); k.y = clamp(k.y, 24, MAP - 24); k.v *= .5;
+  }
+  for (const s of tr.scenery) {
+    const dx = k.x - s.x, dy = k.y - s.y;
+    if (dx * dx + dy * dy < 170) {
+      const d = Math.hypot(dx, dy) || 1; k.x = s.x + dx / d * 13.2; k.y = s.y + dy / d * 13.2;
+      if (k === G.me && Math.abs(k.v) > 50) { Snd.thud(); G.cam.kick = 1; }
+      k.v *= -.25; k.drift = 0;
+    }
+  }
+  // Boost-Felder
+  for (const p of tr.pads) {
+    if (k.padCd <= 0 && Math.hypot(k.x - p.x, k.y - p.y) < 44) { k.boost = Math.max(k.boost, 1); k.padCd = 1; if (k === G.me) Snd.boost(); }
+  }
+  // Staub und Flammen
+  if (k.off && Math.abs(k.v) > 40 && Math.random() < .5) puff(k, tr.theme.shoulder, 3);
+  if (k.boost > 0 && Math.random() < .9) flame(k);
+
+  // Streckenfortschritt und Runden
+  const prevF = k.f;
+  k.idx = nearestIdx(tr, k.x, k.y); k.f = k.idx / tr.N;
+  while (k.cp < 4 && k.f >= (k.cp + 1) * .2 && k.f < (k.cp + 1) * .2 + .25) k.cp++;
+  if (k.cp >= 4 && prevF > .8 && k.f < .2) {
+    k.lap++; k.cp = 0;
+    if (k.lap > 1) {
+      const lapT = G.t - k.lapStart;
+      if (!k.bestLap || lapT < k.bestLap) k.bestLap = lapT;
+      if (k === G.me) lapDone(lapT);
+    }
+    k.lapStart = G.t;
+    if (k.lap > LAPS && !k.finished) finishKart(k);
+  }
+  k.prog = k.lap + (k.f > .8 && k.cp < 2 ? k.f - 1 : k.f);
+  if (k.finished) k.prog = 100 - k.finished / 1000;
+
+  // Items
+  if (k.roll > 0) {
+    k.roll -= dt;
+    if (k.roll <= 0) { k.item = pickItem(k.rank); k.useIn = 1 + Math.random() * 3; if (k === G.me) Snd.tone(880, .1, 'square', .06); }
+  }
+}
+
+function aiInput(k, dt) {
+  const tr = G.tr, N = tr.N;
+  const look = Math.round(clamp(k.v * .26, 34, 120) / STEP), i = (k.idx + look) % N;
+  k.aiLatT -= dt;
+  if (k.aiLatT <= 0) { k.aiLat = (Math.random() - .5) * 1.1; k.aiLatT = 1.5 + Math.random() * 2.5; }
+  if (k.rival) {
+    // Rivalen fahren die Ideallinie: in Kurven an die Innenseite
+    const a = (k.idx + look) % N, b = (a + 16) % N, turn = tr.tx[a] * tr.ty[b] - tr.ty[a] * tr.tx[b];
+    k.aiLat = clamp(turn * 3, -.45, .45);
+  }
+  k.aiNow = lerp(k.aiNow, k.off ? 0 : k.aiLat, Math.min(1, dt * (k.rival ? 3 : 1.6)));
+  let wantX = tr.px[i] - tr.ty[i] * k.aiNow * tr.half, wantY = tr.py[i] + tr.tx[i] * k.aiNow * tr.half;
+  const want = Math.atan2(wantY - k.y, wantX - k.x), d = angDiff(want, k.a);
+  let cMax = 0;
+  for (let j = 0; j < 44; j += 4) cMax = Math.max(cMax, tr.curv[(k.idx + j) % N]);
+  const limit = clamp((k.rival ? 2.05 : 1.95) * Math.sqrt(tr.grip) / Math.max(cMax, .0008), k.rival ? 125 : 115, 999);
+  const c = CLASSES[G.cls];
+  const gap = G.state === 'menu' ? 0 : k.prog - G.me.prog;
+  // Rivalen warten kaum auf den Spieler, alle anderen halten das Feld zusammen
+  k.aiMul = (k.rival ? c.rival : c.ai * k.aiTop) * (1 - clamp(gap * 1.1, -.1, k.rival ? .05 : .06));
+  if (k.rival) {
+    // statt echtem Drift: Turbo am Kurvenausgang, wenn die Kurve sauber gefahren wurde
+    if (k.off) k.aiCurve = 0;
+    else if (cMax > .0045) k.aiCurve += dt;
+    else if (cMax < .003) { if (k.aiCurve > .6) k.boost = Math.max(k.boost, .6); k.aiCurve = 0; }
+  }
+  k.stuck = Math.abs(k.v) < 22 && k.spin <= 0 ? k.stuck + dt : 0;
+  if (k.stuck > 1.6) {
+    k.x = tr.px[k.idx]; k.y = tr.py[k.idx]; k.a = k.move = Math.atan2(tr.ty[k.idx], tr.tx[k.idx]); k.v = 40; k.stuck = 0;
+  }
+  if (k.item) {
+    k.useIn -= dt;
+    if (k.useIn <= 0) {
+      const straight = cMax < .003;
+      if (k.item !== 'turbo' || straight) useItem(k);
+      else k.useIn = .5;
+    }
+  }
+  return { steer: clamp(d * (k.rival ? 3.6 : 2.8), -1, 1), gas: k.v < limit, brake: k.v > limit + 45, drift: false };
+}
+
+function pickItem(rank) {
+  const r = Math.random();
+  if (rank <= 1) return r < .55 ? 'oel' : r < .8 ? 'schild' : 'turbo';
+  if (rank <= 3) return r < .35 ? 'rakete' : r < .65 ? 'turbo' : r < .85 ? 'oel' : 'schild';
+  return r < .42 ? 'rakete' : r < .82 ? 'turbo' : 'schild';
+}
+function useItem(k) {
+  const it = k.item;
+  if (!it) return;
+  k.item = null;
+  const mine = k === G.me;
+  if (it === 'turbo') { k.boost = Math.max(k.boost, 1.6); mine && Snd.boost(); }
+  if (it === 'schild') { k.shield = 6; mine && Snd.tone(660, .25, 'triangle', .1, 1320); }
+  if (it === 'oel') {
+    if (G.oils.length >= 8) G.oils.shift();
+    G.oils.push({ x: k.x - Math.cos(k.a) * 22, y: k.y - Math.sin(k.a) * 22, by: k, safe: .6 });
+    mine && Snd.tone(180, .12, 'sawtooth', .07, 90);
+  }
+  if (it === 'rakete') {
+    const target = G.karts.find(o => o.rank === k.rank - 1) || null;
+    G.rockets.push({ x: k.x + Math.cos(k.a) * 16, y: k.y + Math.sin(k.a) * 16, a: k.a, v: Math.max(k.v, 0) + 240, by: k, target, life: 6, safe: .35 });
+    mine && Snd.tone(300, .3, 'sawtooth', .08, 900);
+  }
+}
+function hit(k) {
+  if (k.shield > 0 || k.spin > 0) return;
+  k.spin = 1.15; k.v *= .4; k.drift = 0; k.charge = 0;
+  if (k === G.me) { Snd.thud(); Snd.tone(500, .4, 'square', .07, 120); G.cam.kick = 1.4; }
+  for (let i = 0; i < 10; i++) puff(k, '#ffc72c', 4);
+}
+
+function updateWorld(dt) {
+  const tr = G.tr, K = G.karts;
+  // Kart gegen Kart
+  for (let i = 0; i < K.length; i++) for (let j = i + 1; j < K.length; j++) {
+    const a = K[i], b = K[j], dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+    if (d2 < 196 && d2 > .01) {
+      const d = Math.sqrt(d2), p = (14 - d) / 2, nx = dx / d, ny = dy / d;
+      a.x -= nx * p; a.y -= ny * p; b.x += nx * p; b.y += ny * p;
+      a.v *= .992; b.v *= .992;
+      if (a.shield > 0 && b.shield <= 0) hit(b);
+      if (b.shield > 0 && a.shield <= 0) hit(a);
+    }
+  }
+  // Item-Boxen
+  for (const b of tr.boxes) {
+    if (b.wait > 0) { b.wait -= dt; continue; }
+    for (const k of K) {
+      const dx = k.x - b.x, dy = k.y - b.y;
+      if (dx * dx + dy * dy < 340) {
+        b.wait = 5;
+        if (!k.item && k.roll <= 0) { k.roll = 1; if (k === G.me) Snd.tone(620, .1, 'square', .06, 990); }
+        break;
+      }
+    }
+  }
+  for (const o of G.oils) {
+    o.safe -= dt;
+    for (const k of K) {
+      if (o.safe > 0 && k === o.by) continue;
+      if (Math.hypot(k.x - o.x, k.y - o.y) < 16) { hit(k); o.dead = true; break; }
+    }
+  }
+  G.oils = G.oils.filter(o => !o.dead);
+  for (const r of G.rockets) {
+    r.life -= dt; r.safe -= dt;
+    const i = (nearestIdx(tr, r.x, r.y) + 22) % tr.N;
+    let tx = tr.px[i], ty = tr.py[i];
+    if (r.target && Math.hypot(r.target.x - r.x, r.target.y - r.y) < 280) { tx = r.target.x; ty = r.target.y; }
+    r.a += clamp(angDiff(Math.atan2(ty - r.y, tx - r.x), r.a), -6 * dt, 6 * dt);
+    r.x += Math.cos(r.a) * r.v * dt; r.y += Math.sin(r.a) * r.v * dt;
+    if (Math.random() < .8) G.fx.push({ x: r.x, y: r.y, z: 5, vx: 0, vy: 0, vz: 12, life: .3, max: .3, col: '#e8e4dc', size: 2.5 });
+    for (const k of K) {
+      if (r.safe > 0 && k === r.by) continue;
+      if (Math.hypot(k.x - r.x, k.y - r.y) < 17) { hit(k); r.life = 0; break; }
+    }
+  }
+  G.rockets = G.rockets.filter(r => r.life > 0);
+  for (const f of G.fx) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; f.vz -= 40 * dt; }
+  G.fx = G.fx.filter(f => f.life > 0 && f.z > -1);
+  if (G.fx.length > 260) G.fx.splice(0, G.fx.length - 260);
+  [...K].sort((a, b) => b.prog - a.prog).forEach((k, i) => { k.rank = i; });
+}
+function spark(k) {
+  const col = k.charge > 1.5 ? '#ff9a3c' : k.charge > .65 ? '#6fd6ff' : '#f7f2e6';
+  const b = k.a + Math.PI + (Math.random() - .5) * .9;
+  G.fx.push({ x: k.x + Math.cos(k.a + Math.PI) * 10, y: k.y + Math.sin(k.a + Math.PI) * 10, z: 1, vx: Math.cos(b) * 50, vy: Math.sin(b) * 50, vz: 26, life: .28, max: .28, col, size: 2 });
+}
+function puff(k, col, s) {
+  G.fx.push({ x: k.x + (Math.random() - .5) * 12, y: k.y + (Math.random() - .5) * 12, z: 1, vx: (Math.random() - .5) * 30, vy: (Math.random() - .5) * 30, vz: 22, life: .45, max: .45, col, size: s });
+}
+function flame(k) {
+  const col = Math.random() < .5 ? '#ffc72c' : '#ff5a1f';
+  G.fx.push({ x: k.x - Math.cos(k.a) * 12, y: k.y - Math.sin(k.a) * 12, z: 4, vx: -Math.cos(k.a) * 40, vy: -Math.sin(k.a) * 40, vz: 8, life: .22, max: .22, col, size: 3 });
+}
+
+/* ---------- Rennablauf ---------- */
+function lapDone(t) {
+  $('last').textContent = 'Runde: ' + fmtTime(t);
+  if (G.me.lap === LAPS) flash('Letzte Runde', 1.6, true), Snd.fanfare();
+  else if (G.me.lap < LAPS) Snd.tone(990, .12, 'square', .06);
+}
+let flashT = 0;
+function flash(text, secs, small) {
+  const b = $('banner'); b.textContent = text; b.classList.toggle('small', !!small); flashT = secs;
+}
+function finishKart(k) {
+  k.finished = G.finishList.length + 1;
+  k.finishT = G.t;
+  G.finishList.push(k);
+  if (k === G.me && G.state === 'race') playerDone();
+}
+function playerDone() {
+  G.state = 'done'; G.me.ai = true;
+  Snd.fanfare();
+  const lapAvg = G.t / LAPS, def = TRACKS[G.trackI];
+  const list = [...G.karts].sort((a, b) => b.prog - a.prog);
+  const key = 'kk-best-' + def.id + '-' + G.cls, old = parseFloat(store.get(key)) || 0, rekord = !old || G.me.finishT < old;
+  if (rekord) store.set(key, G.me.finishT.toFixed(2));
+  $('resTitle').textContent = G.me.rank === 0 ? 'Sieg!' : G.me.rank + 1 + '. Platz';
+  $('resNote').textContent = def.name + ', ' + CLASSES[G.cls].name + (rekord ? ': neue Bestzeit' : ': Bestzeit ' + fmtTime(old));
+  const body = $('resBody'); body.textContent = '';
+  list.forEach((k, i) => {
+    const t = k.finished ? k.finishT : G.t + Math.max(0, LAPS + 1 - k.prog) * lapAvg;
+    const tr = document.createElement('tr');
+    if (k === G.me) tr.className = 'me';
+    for (const v of [i + 1 + '.', k.d.name + (k === G.me ? ' (du)' : ''), (k.finished ? '' : '≈ ') + fmtTime(t)]) {
+      const td = document.createElement('td'); td.textContent = v; tr.append(td);
+    }
+    body.append(tr);
+  });
+  setTimeout(() => { if (G.state === 'done') { $('hud').hidden = true; $('touch').hidden = true; $('results').hidden = false; $('again').focus(); } }, 1600);
+  refreshBest();
+}
+function startRace() {
+  Snd.init();
+  setupRace(false);
+  G.finishList = [];
+  G.state = 'countdown'; G.cd = 3.6; G.lastBeep = 4;
+  $('menu').hidden = true; $('results').hidden = true; $('pause').hidden = true;
+  $('hud').hidden = false; $('touch').hidden = !touchMode;
+  $('last').textContent = ''; $('banner').textContent = '';
+  canvas.focus?.();
+  document.activeElement?.blur?.();
+}
+function toMenu() {
+  G.state = 'menu'; Snd.stopAll();
+  $('menu').hidden = false; $('results').hidden = true; $('pause').hidden = true; $('hud').hidden = true; $('touch').hidden = true;
+  setupRace(true);
+}
+function togglePause() {
+  if (G.state === 'race' || G.state === 'countdown') {
+    G.resume = G.state; G.state = 'pause'; $('pause').hidden = false; Snd.setEngine(0, false); $('resume').focus();
+  } else if (G.state === 'pause') {
+    G.state = G.resume; $('pause').hidden = true; document.activeElement?.blur?.();
+  }
+}
+$('go').onclick = startRace;
+$('again').onclick = startRace;
+$('restart').onclick = startRace;
+$('toMenu').onclick = toMenu;
+$('quit').onclick = toMenu;
+$('resume').onclick = togglePause;
+
+/* ---------- Ton ---------- */
+const Snd = {
+  ac: null, master: null, on: true, eng: null, engGain: null, engFilter: null, seq: 0, stepN: 0, nextT: 0,
+  init() {
+    if (!this.ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this.ac = new AC();
+      this.master = this.ac.createGain(); this.master.gain.value = this.on ? .8 : 0; this.master.connect(this.ac.destination);
+      const o = this.ac.createOscillator(), f = this.ac.createBiquadFilter(), g = this.ac.createGain();
+      o.type = 'sawtooth'; o.frequency.value = 60; f.type = 'lowpass'; f.frequency.value = 500; g.gain.value = 0;
+      o.connect(f); f.connect(g); g.connect(this.master); o.start();
+      this.eng = o; this.engFilter = f; this.engGain = g;
+    }
+    this.ac.resume?.();
+    if (!this.seq) { this.nextT = this.ac.currentTime + .1; this.seq = setInterval(() => this.music(), 90); }
+  },
+  toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? .8 : 0; },
+  tone(f, dur, type = 'square', vol = .08, to) {
+    if (!this.ac) return;
+    const t = this.ac.currentTime, o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + .02);
+  },
+  thud() { this.tone(120, .18, 'triangle', .22, 50); },
+  boost() { this.tone(240, .35, 'sawtooth', .09, 1100); },
+  fanfare() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, .16, 'square', .07), i * 110)); },
+  setEngine(frac, active) {
+    if (!this.eng) return;
+    const t = this.ac.currentTime;
+    this.eng.frequency.setTargetAtTime(55 + frac * 150, t, .05);
+    this.engFilter.frequency.setTargetAtTime(350 + frac * 1300, t, .05);
+    this.engGain.gain.setTargetAtTime(active ? .045 : 0, t, .05);
+  },
+  // eigene kleine Melodie: 16 Achtel je Takt, Bass und Arpeggio
+  music() {
+    if (!this.ac) return;
+    const playing = G.state === 'race' || G.state === 'done';
+    const roots = [110, 110, 146.83, 123.47], arp = [0, 7, 12, 16, 12, 7, 19, 12], step = .1;
+    while (this.nextT < this.ac.currentTime + .25) {
+      const n = this.stepN++, bar = (n >> 4) & 3, root = roots[bar];
+      if (playing) {
+        if (n % 2 === 0) this.at(this.nextT, root * ((n >> 1) & 1 ? 1 : .5) * 1, .09, 'triangle', .11);
+        const minor = bar === 3 ? -1 : 0, semi = arp[n & 7];
+        this.at(this.nextT, root * 2 * Math.pow(2, (semi === 16 ? semi + minor : semi) / 12), .08, 'square', .018);
+      }
+      this.nextT += step;
+    }
+  },
+  at(t, f, dur, type, vol) {
+    const o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + .02);
+  },
+  stopAll() { this.setEngine(0, false); },
+};
+
+/* ---------- Zeichnen ---------- */
+function renderGround() {
+  const { W, H, hz, f } = view, c = G.cam, tr = G.tr, ca = Math.cos(c.a), sa = Math.sin(c.a), mips = tr.mips, outA = tr.outA, outB = tr.outB;
+  for (let y = hz + 1; y < H; y++) {
+    const dist = c.h * f / (y - hz), step = dist / f;
+    const lvl = clamp(Math.floor(Math.log2(step) + .6), 0, 4), m = mips[lvl], data = m.data, sz = m.size;
+    let wx = c.x + ca * dist + sa * (W / 2) * step, wy = c.y + sa * dist - ca * (W / 2) * step;
+    const dx = -sa * step, dy = ca * step;
+    let o = y * W;
+    for (let x = 0; x < W; x++) {
+      if (wx >= 0 && wy >= 0 && wx < MAP && wy < MAP) frame[o] = data[(wy >> lvl) * sz + (wx >> lvl)];
+      else frame[o] = (((wx >> 6) ^ (wy >> 6)) & 1) ? outA : outB;
+      o++; wx += dx; wy += dy;
+    }
+  }
+  ctx.putImageData(img, 0, 0, 0, hz, W, H - hz);
+}
+function renderSky() {
+  const { W, hz } = view, a = G.cam.a;
+  ctx.drawImage(G.skyGrad, 0, 0, W, hz + 1);
+  const tile = (im, rate, h) => {
+    let ox = -((a / TAU * rate) % 1024); if (ox > 0) ox -= 1024;
+    for (let x = ox; x < W; x += 1024) ctx.drawImage(im, Math.round(x), 0, 1024, h);
+  };
+  tile(G.clouds, 1400, hz);
+  tile(G.sky, 2048, hz);
+}
+function project(x, y, z) {
+  const c = G.cam, dx = x - c.x, dy = y - c.y, ca = c.ca, sa = c.sa, depth = dx * ca + dy * sa;
+  if (depth < 7) return null;
+  const xr = -dx * sa + dy * ca, s = view.f / depth;
+  return { sx: view.W / 2 + xr * s, sy: view.hz + (c.h - z) * s, s, depth, xr };
+}
+function renderSprites() {
+  const c = G.cam, tr = G.tr, W = view.W, list = [];
+  c.ca = Math.cos(c.a); c.sa = Math.sin(c.a);
+  for (const s of tr.scenery) {
+    const dx = s.x - c.x, dy = s.y - c.y;
+    if (dx * c.ca + dy * c.sa < 7 || dx * dx + dy * dy > 1400 * 1400) continue;
+    const p = project(s.x, s.y, 0);
+    if (!p) continue;
+    const sp = SCENERY[s.kind], h = sp.h * p.s, w = h * sp.c.width / sp.c.height;
+    if (p.sx + w < 0 || p.sx - w > W) continue;
+    list.push({ d: p.depth, im: sp.c, x: p.sx - w / 2, y: p.sy - h, w, h });
+  }
+  const t = performance.now() / 1000;
+  tr.boxes.forEach((b, i) => {
+    if (b.wait > 0) return;
+    const p = project(b.x, b.y, 7 + Math.sin(t * 3 + i) * 1.5);
+    if (!p) return;
+    const s = 15 * p.s;
+    list.push({ d: p.depth, im: BOXES[(Math.floor(t * 8) + i) % BOXES.length], x: p.sx - s / 2, y: p.sy - s / 2, w: s, h: s });
+  });
+  for (const o of G.oils) {
+    const p = project(o.x, o.y, 0);
+    if (p) list.push({ d: p.depth + 3, im: OIL, x: p.sx - 13 * p.s, y: p.sy - 5.5 * p.s, w: 26 * p.s, h: 11 * p.s });
+  }
+  for (const r of G.rockets) {
+    const p = project(r.x, r.y, 5);
+    if (p) list.push({ d: p.depth, im: ROCKET, x: p.sx - 7 * p.s, y: p.sy - 7 * p.s, w: 14 * p.s, h: 14 * p.s });
+  }
+  for (const k of G.karts) {
+    const p = project(k.x, k.y, 0);
+    if (p) list.push({ d: p.depth, kart: k, p });
+  }
+  for (const f of G.fx) {
+    const p = project(f.x, f.y, f.z);
+    if (p) list.push({ d: p.depth, fx: f, p });
+  }
+  list.sort((a, b) => b.d - a.d);
+  for (const e of list) {
+    if (e.kart) drawKart(e.kart, e.p);
+    else if (e.fx) {
+      const s = Math.max(1, e.fx.size * e.p.s * (.4 + .6 * e.fx.life / e.fx.max));
+      ctx.fillStyle = e.fx.col; ctx.fillRect(Math.round(e.p.sx - s / 2), Math.round(e.p.sy - s / 2), Math.ceil(s), Math.ceil(s));
+    } else ctx.drawImage(e.im, Math.round(e.x), Math.round(e.y), Math.max(1, Math.round(e.w)), Math.max(1, Math.round(e.h)));
+  }
+}
+function drawKart(k, p) {
+  ctx.fillStyle = 'rgba(10,10,20,.32)';
+  ctx.beginPath(); ctx.ellipse(p.sx, p.sy, 10 * p.s, 3.6 * p.s, 0, 0, TAU); ctx.fill();
+  let rel = k.a + k.spinA - G.cam.a - Math.atan2(p.xr, p.depth);
+  rel = ((rel % TAU) + TAU) % TAU;
+  const fr = Math.round(rel / TAU * FRAMES) % FRAMES, size = CELL_WORLD * p.s;
+  const x = Math.round(p.sx - size / 2), y = Math.round(p.sy - size * PIVOT - k.z * p.s), s = Math.round(size);
+  ctx.drawImage(k.d.sheet, fr * CELL, 0, CELL, CELL, x, y, s, s);
+  if (k.shield > 0 && (k.shield > 1 || (k.shield * 8 | 0) & 1)) {
+    ctx.strokeStyle = '#6fd6ff'; ctx.lineWidth = Math.max(1, 1.2 * p.s);
+    ctx.beginPath(); ctx.ellipse(p.sx, p.sy - 5 * p.s, 14 * p.s, 11 * p.s, 0, 0, TAU); ctx.stroke();
+  }
+}
+function render() {
+  const c = G.cam, W = view.W, hz = view.hz;
+  renderGround();
+  renderSky();
+  ctx.fillStyle = G.fog; ctx.fillRect(0, hz, W, 46);
+  renderSprites();
+}
+function updateCam(dt) {
+  const c = G.cam, k = camTarget();
+  const speedF = clamp(k.v / 300, 0, 1.3);
+  c.a += angDiff(k.a, c.a) * Math.min(1, dt * (k.drift ? 3.6 : 6.5));
+  const kick = reduced ? 0 : (c.kick || 0) * Math.sin(performance.now() / 22) * 2;
+  c.kick = Math.max(0, (c.kick || 0) - dt * 3);
+  c.dist = lerp(c.dist, 58 + speedF * 8, Math.min(1, dt * 3));
+  view.f = view.f0 * (reduced ? 1 : 1 - .05 * clamp(k.boost * 3, 0, 1));
+  c.x = k.x - Math.cos(c.a) * c.dist + kick;
+  c.y = k.y - Math.sin(c.a) * c.dist;
+}
+const camTarget = () => G.state === 'menu' ? [...G.karts].sort((a, b) => a.rank - b.rank)[0] : G.me;
+
+/* ---------- HUD ---------- */
+const mapCtx = $('map').getContext('2d');
+function drawTrackLine(g, tr, size, width, color) {
+  const s = size / MAP;
+  g.beginPath();
+  for (let i = 0; i < tr.N; i += 6) i ? g.lineTo(tr.px[i] * s, tr.py[i] * s) : g.moveTo(tr.px[i] * s, tr.py[i] * s);
+  g.closePath(); g.lineJoin = 'round'; g.lineWidth = width; g.strokeStyle = color; g.stroke();
+}
+let hudItem = '#', hudPos = 0, hudLap = 0;
+function updateHud(dt) {
+  const k = G.me, tr = G.tr, g = mapCtx;
+  $('time').textContent = fmtTime(G.t);
+  if (k.rank !== hudPos) { hudPos = k.rank; $('pos').innerHTML = hudPos + 1 + '.<small>von 6</small>'; }
+  const lap = clamp(k.lap, 1, LAPS);
+  if (lap !== hudLap) { hudLap = lap; $('lap').textContent = 'Runde ' + lap + '/' + LAPS; }
+  $('kmh').textContent = Math.round(Math.abs(k.v) * .55);
+  const ch = clamp(k.charge / 1.5, 0, 1);
+  $('chargeBar').style.width = ch * 100 + '%';
+  $('chargeBar').style.background = k.charge > 1.5 ? '#ff9a3c' : k.charge > .65 ? '#6fd6ff' : '#f7f2e6';
+  const show = k.roll > 0 ? ITEM_KEYS[Math.floor(performance.now() / 80) % 4] : k.item || '';
+  if (show !== hudItem) {
+    hudItem = show; $('item').innerHTML = show ? ICONS[show] : ''; $('item').classList.toggle('empty', !show);
+  }
+  g.clearRect(0, 0, 200, 200);
+  drawTrackLine(g, tr, 200, 9, '#1d2029');
+  drawTrackLine(g, tr, 200, 5, '#f7f2e6');
+  const s = 200 / MAP;
+  for (const o of G.karts) {
+    if (o === k) continue;
+    g.fillStyle = o.d.kart; g.beginPath(); g.arc(o.x * s, o.y * s, 6, 0, TAU); g.fill();
+    g.lineWidth = 1.5; g.strokeStyle = '#1d2029'; g.stroke();
+  }
+  g.fillStyle = k.d.kart; g.beginPath(); g.arc(k.x * s, k.y * s, 8, 0, TAU); g.fill();
+  g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke();
+
+  const i = k.idx, facing = Math.cos(k.a) * tr.tx[i] + Math.sin(k.a) * tr.ty[i];
+  G.wrong = facing < -.3 && k.v > 20 && G.state === 'race' ? G.wrong + dt : 0;
+  if (G.wrong > 1) flash('Falsche Richtung', .3, true);
+  if (flashT > 0) { flashT -= dt; if (flashT <= 0) $('banner').textContent = ''; }
+}
+
+/* ---------- Hauptschleife ---------- */
+const DT = 1 / 60;
+function stepRace(dt) {
+  for (const k of G.karts) {
+    let inp;
+    if (k.ai) inp = aiInput(k, dt);
+    else {
+      inp = readInput();
+      if (itemPressed && k.item && k.spin <= 0) useItem(k);
+      itemPressed = false;
+    }
+    updateKart(k, dt, inp);
+  }
+  updateWorld(dt);
+}
+function tick(dt) {
+  if (G.state === 'menu') { stepRace(dt); G.karts.forEach(k => { if (k.lap > LAPS) { k.lap = 1; k.finished = 0; } }); }
+  else if (G.state === 'countdown') {
+    G.cd -= dt;
+    const n = Math.ceil(G.cd);
+    if (n !== G.lastBeep && n >= 1 && n <= 3) { flash(String(n), 1); Snd.tone(440, .15, 'square', .09); }
+    G.lastBeep = n;
+    const gas = readInput().gas;
+    if (gas && G.cd > .55 && G.gasEarly < 0) G.gasEarly = 1;       // zu frueh: kein Blitzstart
+    if (gas && G.cd <= .55 && G.gasEarly !== 1) G.gasEarly = 2;
+    if (!gas && G.cd > .55) G.gasEarly = -1;
+    if (G.cd <= 0) {
+      G.state = 'race'; G.t = 0; flash('Los!', .8); Snd.tone(880, .35, 'square', .1);
+      if (G.gasEarly === 2) { G.me.boost = .9; Snd.boost(); }
+      for (const k of G.karts) k.lapStart = 0;
+    }
+  } else if (G.state === 'race' || G.state === 'done') {
+    G.t += dt;
+    stepRace(dt);
+  }
+}
+let lastTime = 0, acc = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(.1, (now - lastTime) / 1000 || 0); lastTime = now;
+  if (G.state !== 'pause') {
+    acc += dt;
+    let n = 0;
+    while (acc >= DT && n++ < 6) { tick(DT); acc -= DT; }
+    if (n > 5) acc = 0;
+    updateCam(dt);
+    if (G.state !== 'menu' && G.state !== 'done') {
+      updateHud(dt);
+      Snd.setEngine(clamp(Math.abs(G.me.v) / 300, 0, 1), true);
+    } else Snd.setEngine(0, false);
+    render();
+  }
+}
+
+/* ---------- Menue ---------- */
+function press(list, i) { [...list.children].forEach((b, j) => b.setAttribute('aria-pressed', String(i === j))); }
+function refreshBest() {
+  TRACKS.forEach((d, i) => {
+    const v = parseFloat(store.get('kk-best-' + d.id + '-' + G.cls));
+    $('trackList').children[i].querySelector('small').textContent = v ? fmtTime(v) : 'keine Bestzeit';
+  });
+}
+TRACKS.forEach((d, i) => {
+  const b = document.createElement('button'), c = document.createElement('canvas');
+  b.id = 'track-' + d.id;
+  c.width = c.height = 184;
+  const g = c.getContext('2d');
+  drawTrackLine(g, d.built, 184, 12, d.built.theme.a);
+  b.append(c);
+  b.insertAdjacentHTML('beforeend', '<b>' + d.name + '</b><small></small>');
+  b.onclick = () => { G.trackI = i; press($('trackList'), i); setupRace(true); };
+  $('trackList').append(b);
+});
+CLASSES.forEach((c, i) => {
+  const b = document.createElement('button');
+  b.id = 'class-' + i; b.innerHTML = c.name + '<small>' + c.hint + '</small>';
+  b.onclick = () => { G.cls = i; press($('classList'), i); refreshBest(); };
+  $('classList').append(b);
+});
+function showStats() {
+  const d = DRIVERS[G.drv], rows = [['Tempo', d.stats.top, .94, 1.08], ['Antrieb', d.stats.acc, .85, 1.2], ['Lenkung', d.stats.hand, .9, 1.16]];
+  $('stats').innerHTML = '<div class="who">' + d.name + '</div>' + rows.map(([n, v, a, b]) =>
+    '<span>' + n + '</span><div class="meter"><i style="width:' + Math.round((v - a) / (b - a) * 100) + '%"></i></div>').join('');
+}
+DRIVERS.forEach((d, i) => {
+  const b = document.createElement('button'), c = document.createElement('canvas');
+  b.id = 'driver-' + d.animal; b.setAttribute('aria-label', d.name);
+  c.width = 72; c.height = 72;
+  // Dreiviertelansicht von vorn, Kopf und Kart im Ausschnitt
+  c.getContext('2d').drawImage(d.sheet, 13 * CELL + 16, 2, 112, 112, 0, 0, 72, 72);
+  b.append(c);
+  b.onclick = () => { G.drv = i; press($('driverList'), i); showStats(); };
+  $('driverList').append(b);
+});
+press($('trackList'), 0); press($('classList'), 1); press($('driverList'), 0);
+showStats(); refreshBest();
+addEventListener('resize', resize);
+addEventListener('orientationchange', resize);
+resize();
+setupRace(true);
+requestAnimationFrame(loop);
+</script>
